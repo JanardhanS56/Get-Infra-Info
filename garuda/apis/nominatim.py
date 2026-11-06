@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import requests
 from ..models import PlaceInfo
 
@@ -57,3 +57,25 @@ def fetch_place_info(lat: float, lon: float, timeout: int = 10) -> PlaceInfo:
         state="Unspecified",
         country="Unspecified",
     )
+
+
+def search_pois_in_viewbox(
+    south: float, west: float, north: float, east: float, query: str, limit: int = 10
+) -> List[Dict[str, Any]]:
+    """
+    Searches for points of interest within the specified bounding box viewbox.
+    viewbox format for Nominatim: left,top,right,bottom (i.e. west, north, east, south)
+    """
+    viewbox = f"{west:.6f},{north:.6f},{east:.6f},{south:.6f}"
+    url = f"https://nominatim.openstreetmap.org/search?q={query}&format=jsonv2&bounded=1&viewbox={viewbox}&limit={limit}"
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=8)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
