@@ -10,3 +10,5 @@ build/
 env/
 reports/
 *.json.bak
+.env
+nvidia_connect.txt
