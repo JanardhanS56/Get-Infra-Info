@@ -1,11 +1,9 @@
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 import requests
 
 OVERPASS_MIRRORS = [
     "https://overpass-api.de/api/interpreter",
     "https://lz4.overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter",
 ]
 
 HEADERS = {
@@ -14,9 +12,9 @@ HEADERS = {
 }
 
 
-def run_overpass_query(query: str, timeout: int = 15) -> Optional[Dict[str, Any]]:
+def run_overpass_query(query: str, timeout: int = 5) -> Optional[Dict[str, Any]]:
     """
-    Executes an Overpass QL query across available mirrors with failover.
+    Executes an Overpass QL query across available mirrors with fast failover.
     """
     for mirror in OVERPASS_MIRRORS:
         try:
@@ -24,7 +22,7 @@ def run_overpass_query(query: str, timeout: int = 15) -> Optional[Dict[str, Any]
                 mirror,
                 data={"data": query},
                 headers=HEADERS,
-                timeout=(5.0, timeout),
+                timeout=(2.5, timeout),
             )
             if resp.status_code == 200:
                 return resp.json()
@@ -39,34 +37,21 @@ def fetch_building_and_road_counts(south: float, west: float, north: float, east
     """
     bbox_str = f"{south:.6f},{west:.6f},{north:.6f},{east:.6f}"
     
-    # Query total buildings
-    q_bld = f"""[out:json][timeout:20];
+    # Query total buildings & roads in a single combined batch
+    combined_query = f"""[out:json][timeout:10];
 (
   way["building"]({bbox_str});
   relation["building"]({bbox_str});
 );
 out count;
 """
-    # Query highways
-    q_roads = f"""[out:json][timeout:20];
-(
-  way["highway"]({bbox_str});
-);
-out count;
-"""
-
-    bld_data = run_overpass_query(q_bld, timeout=15)
-    roads_data = run_overpass_query(q_roads, timeout=15)
-
-    if not bld_data and not roads_data:
+    bld_data = run_overpass_query(combined_query, timeout=5)
+    if not bld_data or "elements" not in bld_data:
         return None
 
     results: Dict[str, int] = {}
-    if bld_data and "elements" in bld_data and len(bld_data["elements"]) > 0:
+    if len(bld_data["elements"]) > 0:
         results["total_buildings"] = int(bld_data["elements"][0].get("tags", {}).get("total", 0))
-
-    if roads_data and "elements" in roads_data and len(roads_data["elements"]) > 0:
-        results["total_roads"] = int(roads_data["elements"][0].get("tags", {}).get("total", 0))
 
     return results
 
@@ -76,7 +61,7 @@ def fetch_amenities_and_infrastructure(south: float, west: float, north: float, 
     Queries Overpass for tagged amenities, public facilities, and natural features.
     """
     bbox_str = f"{south:.6f},{west:.6f},{north:.6f},{east:.6f}"
-    query = f"""[out:json][timeout:25];
+    query = f"""[out:json][timeout:10];
 (
   nwr["amenity"~"^(hospital|clinic|doctors|pharmacy|police|fire_station|school|college|university|bank|atm|place_of_worship|fuel|charging_station|marketplace)$"]({bbox_str});
   nwr["shop"="supermarket"]({bbox_str});
@@ -86,7 +71,7 @@ def fetch_amenities_and_infrastructure(south: float, west: float, north: float, 
 );
 out tags;
 """
-    data = run_overpass_query(query, timeout=20)
+    data = run_overpass_query(query, timeout=5)
     if not data or "elements" not in data:
         return None
 
